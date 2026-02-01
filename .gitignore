@@ -1,0 +1,10 @@
+sauli-app-gcp-key.json
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+node_modules/
+__pycache__/
+.env
+.DS_Store
+property-mgmt-app-key.json
