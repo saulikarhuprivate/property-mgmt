@@ -199,3 +199,13 @@ resource "google_cloudbuild_trigger" "process_upload" {
 
   depends_on = [google_project_service.apis]
 }
+
+# Artifact Registry Repository for Docker images
+resource "google_artifact_registry_repository" "docker_repo" {
+  location      = var.region
+  repository_id = "docker-repo"
+  description   = "Docker repository for property-mgmt backend"
+  format        = "DOCKER"
+  
+  depends_on = [google_project_service.apis]
+}
