@@ -29,6 +29,31 @@ resource "google_storage_bucket" "upload_bucket" {
   }
 }
 
+# Cloud Storage Bucket for Frontend
+resource "google_storage_bucket" "frontend_bucket" {
+  name     = "${var.project_id}-frontend"
+  location = var.region
+  
+  website {
+    main_page_suffix = "index.html"
+    not_found_page   = "index.html"
+  }
+  
+  cors {
+    origin          = ["*"]
+    method          = ["GET", "HEAD", "OPTIONS"]
+    response_header = ["*"]
+    max_age_seconds = 3600
+  }
+}
+
+# Make frontend bucket public
+resource "google_storage_bucket_iam_member" "frontend_public_access" {
+  bucket = google_storage_bucket.frontend_bucket.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
+}
+
 # BigQuery Dataset
 resource "google_bigquery_dataset" "energy_data" {
   dataset_id                  = "energy_data"
@@ -121,6 +146,13 @@ resource "google_project_iam_member" "bq_job_user" {
   member  = "serviceAccount:${google_service_account.function_identity.email}"
 }
 
+# Grant Function Identity access to receive events
+resource "google_project_iam_member" "function_event_receiver" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.function_identity.email}"
+}
+
 # Service Account for Cloud Build
 resource "google_service_account" "cloud_build" {
   account_id   = "cloud-build-sa"
@@ -160,6 +192,20 @@ resource "google_project_iam_member" "cloud_build_logs_writer" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Grant Cloud Build access to manage Eventarc triggers
+resource "google_project_iam_member" "cloud_build_eventarc_admin" {
+  project = var.project_id
+  role    = "roles/eventarc.admin"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Grant Cloud Build access to write to Frontend Bucket
+resource "google_storage_bucket_iam_member" "cloud_build_frontend_writer" {
+  bucket = google_storage_bucket.frontend_bucket.name
+  role   = "roles/storage.admin"
+  member = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
 # Cloud Build Trigger for property-mgmt
