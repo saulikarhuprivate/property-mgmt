@@ -90,7 +90,9 @@ resource "google_firestore_database" "database" {
   depends_on = [google_project_service.apis]
 }
 
-# --- Cloud Function Resources ---
+
+
+# --- Cloud Build Configuration ---
 
 # Service Account for Cloud Function
 resource "google_service_account" "function_identity" {
@@ -119,109 +121,6 @@ resource "google_project_iam_member" "bq_job_user" {
   member  = "serviceAccount:${google_service_account.function_identity.email}"
 }
 
-# Zip the Cloud Function source
-data "archive_file" "function_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/../backend/cloud_functions/process_upload"
-  output_path = "${path.module}/function.zip"
-}
-
-# Bucket for function artifacts
-resource "google_storage_bucket" "artifacts" {
-  name     = "${var.project_id}-artifacts"
-  location = var.region
-  uniform_bucket_level_access = true
-}
-
-# Upload source zip
-resource "google_storage_bucket_object" "function_source" {
-  name   = "source-${data.archive_file.function_zip.output_md5}.zip"
-  bucket = google_storage_bucket.artifacts.name
-  source = data.archive_file.function_zip.output_path
-}
-
-# Cloud Function (2nd Gen)
-resource "google_cloudfunctions2_function" "process_upload" {
-  name        = "process-upload"
-  location    = var.region
-  description = "Process energy consumption CSV uploads"
-
-  build_config {
-    runtime     = "python311"
-    entry_point = "process_upload"
-    source {
-      storage_source {
-        bucket = google_storage_bucket.artifacts.name
-        object = google_storage_bucket_object.function_source.name
-      }
-    }
-  }
-
-  service_config {
-    max_instance_count = 1
-    available_memory   = "256M"
-    timeout_seconds    = 60
-    service_account_email = google_service_account.function_identity.email
-    environment_variables = {
-      BIGQUERY_TABLE = "${var.project_id}.${google_bigquery_dataset.energy_data.dataset_id}.${google_bigquery_table.consumption.table_id}"
-    }
-  }
-}
-
-# Grant Storage Pub/Sub Publisher role to the Google Storage Service Agent
-data "google_storage_project_service_account" "gcs_account" {
-}
-
-resource "google_project_iam_member" "gcs_pubsub_publisher" {
-  project = var.project_id
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"
-}
-
-# Eventarc Trigger
-resource "google_eventarc_trigger" "upload_trigger" {
-  name     = "trigger-process-upload"
-  location = var.region
-  matching_criteria {
-    attribute = "type"
-    value     = "google.cloud.storage.object.v1.finalized"
-  }
-  matching_criteria {
-    attribute = "bucket"
-    value     = google_storage_bucket.upload_bucket.name
-  }
-  destination {
-    cloud_run_service {
-      service = "process-upload"
-      region  = var.region
-    }
-  }
-  service_account = google_service_account.function_identity.email
-  
-  depends_on = [
-    google_project_iam_member.gcs_pubsub_publisher,
-    google_project_iam_member.eventarc_receiver
-  ]
-}
-
-# Grant Eventarc permission to invoke the function
-resource "google_cloud_run_service_iam_member" "eventarc_invoker" {
-  project  = var.project_id
-  location = var.region
-  service  = "process-upload"
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.function_identity.email}"
-}
-
-# Grant Eventarc Event Receiver role to the Function Identity
-resource "google_project_iam_member" "eventarc_receiver" {
-  project = var.project_id
-  role    = "roles/eventarc.eventReceiver"
-  member  = "serviceAccount:${google_service_account.function_identity.email}"
-}
-
-# --- Cloud Build Configuration ---
-
 # Service Account for Cloud Build
 resource "google_service_account" "cloud_build" {
   account_id   = "cloud-build-sa"
@@ -249,6 +148,20 @@ resource "google_project_iam_member" "cloud_build_service_account_user" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Grant Cloud Build access to deploy Cloud Functions
+resource "google_project_iam_member" "cloud_build_function_developer" {
+  project = var.project_id
+  role    = "roles/cloudfunctions.developer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Grant Cloud Build access to use Cloud Build Service Agent
+resource "google_project_iam_member" "cloud_build_logs_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # Cloud Build Trigger for property-mgmt
 resource "google_cloudbuild_trigger" "property_mgmt" {
   name            = "property-mgmt"
@@ -256,15 +169,33 @@ resource "google_cloudbuild_trigger" "property_mgmt" {
   location        = var.region
   service_account = google_service_account.cloud_build.id
 
-  github {
-    owner = "saulikarhuprivate"
-    name  = "property-mgmt"
+  repository_event_config {
+    repository = "projects/sauli-propertymgmt/locations/europe-north1/connections/sauli-github/repositories/saulikarhuprivate-property-mgmt"
     push {
       branch = "^main$"
     }
   }
 
   filename = "cloudbuild.yaml"
+
+  depends_on = [google_project_service.apis]
+}
+
+# Cloud Build Trigger for process_upload function
+resource "google_cloudbuild_trigger" "process_upload" {
+  name            = "process-upload-function"
+  description     = "Build trigger for process_upload cloud function"
+  location        = var.region
+  service_account = google_service_account.cloud_build.id
+
+  repository_event_config {
+    repository = "projects/sauli-propertymgmt/locations/europe-north1/connections/sauli-github/repositories/saulikarhuprivate-property-mgmt"
+    push {
+      branch = "^main$"
+    }
+  }
+
+  filename = "cloudbuild-function.yaml"
 
   depends_on = [google_project_service.apis]
 }

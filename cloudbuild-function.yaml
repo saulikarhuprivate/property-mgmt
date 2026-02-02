@@ -1,0 +1,35 @@
+steps:
+  # Deploy process_upload Cloud Function (2nd Gen)
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-function'
+    args:
+      - 'functions'
+      - 'deploy'
+      - 'process-upload'
+      - '--region=${_REGION}'
+      - '--runtime=python311'
+      - '--trigger-bucket=${_UPLOAD_BUCKET}'
+      - '--entry-point=process_upload'
+      - '--source=./backend/cloud_functions/process_upload'
+      - '--memory=256MB'
+      - '--timeout=60s'
+      - '--service-account=${_FUNCTION_SERVICE_ACCOUNT}'
+      - '--set-env-vars=BIGQUERY_TABLE=${_BIGQUERY_TABLE}'
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=${_REGION}'
+
+substitutions:
+  _REGION: 'europe-north1'
+  _UPLOAD_BUCKET: '${PROJECT_ID}-uploads'
+  _FUNCTION_SERVICE_ACCOUNT: 'function-identity@${PROJECT_ID}.iam.gserviceaccount.com'
+  _BIGQUERY_TABLE: '${PROJECT_ID}.energy_data.consumption'
+
+options:
+  machineType: 'E2_STANDARD_4'
+  logging: CLOUD_LOGGING_ONLY
+
+tags:
+  - 'gcp-cloud'
+  - 'process-upload'
+  - 'function'
+  - '${SHORT_SHA}'
