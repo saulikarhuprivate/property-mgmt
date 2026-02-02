@@ -49,10 +49,12 @@ steps:
     waitFor: ['-']
 
   # Step 5: Deploy frontend to Cloud Storage
-  - name: 'gcr.io/cloud-builders/gcs'
+  - name: 'gcr.io/cloud-builders/gsutil'
     id: 'deploy-frontend'
     args:
       - '-m'
+      - 'rsync'
+      - '-r'
       - '-d'
       - 'frontend/dist'
       - 'gs://${_FRONTEND_BUCKET}/'
