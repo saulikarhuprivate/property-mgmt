@@ -63,13 +63,12 @@ steps:
   # Step 5: Deploy frontend to Cloud Storage
   - name: 'gcr.io/cloud-builders/gsutil'
     id: 'deploy-frontend'
+    entrypoint: 'bash'
     args:
-      - '-m'
-      - 'rsync'
-      - '-r'
-      - '-d'
-      - 'frontend/dist'
-      - 'gs://${_FRONTEND_BUCKET}/'
+      - '-c'
+      - |
+        gsutil -m rsync -r -d frontend/dist gs://${_FRONTEND_BUCKET}/
+        gsutil setmeta -h "Cache-Control:no-cache, max-age=0" gs://${_FRONTEND_BUCKET}/index.html
     waitFor: ['build-frontend']
 
 substitutions:
