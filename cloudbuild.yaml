@@ -36,7 +36,19 @@ steps:
       - 'CLOUDSDK_COMPUTE_REGION=${_REGION}'
     waitFor: ['push-backend']
 
-  # Step 4: Build frontend
+  # Step 4: Fetch Backend URL
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'fetch-backend-url'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        BACKEND_URL=$(gcloud run services describe property-mgmt-backend --platform managed --region ${_REGION} --format 'value(status.url)')
+        echo "VITE_API_URL=$BACKEND_URL" > frontend/.env
+        echo "Backend URL fetched: $BACKEND_URL"
+    waitFor: ['deploy-backend']
+
+  # Step 5: Build frontend
   - name: 'node:18'
     id: 'build-frontend'
     entrypoint: bash
@@ -46,7 +58,7 @@ steps:
         cd frontend
         npm install
         npm run build
-    waitFor: ['-']
+    waitFor: ['fetch-backend-url']
 
   # Step 5: Deploy frontend to Cloud Storage
   - name: 'gcr.io/cloud-builders/gsutil'
