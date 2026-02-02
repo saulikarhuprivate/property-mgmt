@@ -1,0 +1,81 @@
+services:
+  # Backend Flask Application
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: property-mgmt-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=5000
+      - FIRESTORE_EMULATOR_HOST=firebase-emulators:8080
+      - FIREBASE_AUTH_EMULATOR_HOST=firebase-emulators:9099
+      - STORAGE_EMULATOR_HOST=http://gcs-emulator:4443
+      - STORAGE_BUCKET_NAME=local-uploads
+      - GOOGLE_CLOUD_PROJECT=property-mgmt-local
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    depends_on:
+      - firebase-emulators
+      - gcs-emulator
+    networks:
+      - property-mgmt-network
+    command: python app.py
+
+  # Frontend Vue.js Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: property-mgmt-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - firebase-emulators
+    networks:
+      - property-mgmt-network
+    command: npm run dev
+
+  # Firebase Emulators (Auth & Firestore)
+  firebase-emulators:
+    image: andreysenov/firebase-tools
+    container_name: property-mgmt-firebase
+    ports:
+      - "9099:9099" # Auth
+      - "8080:8080" # Firestore
+      - "4000:4000" # Emulator UI
+    volumes:
+      - ./firebase.json:/home/node/firebase.json
+      - ./firestore.rules:/home/node/firestore.rules
+      - ./firestore.indexes.json:/home/node/firestore.indexes.json
+    command: firebase emulators:start --project=property-mgmt-local
+    networks:
+      - property-mgmt-network
+
+  # Fake GCS Server (Cloud Storage Emulator)
+  gcs-emulator:
+    image: fsouza/fake-gcs-server
+    container_name: property-mgmt-gcs
+    ports:
+      - "4443:4443"
+    command: -scheme http
+    volumes:
+      - gcs-data:/data
+    networks:
+      - property-mgmt-network
+
+networks:
+  property-mgmt-network:
+    driver: bridge
+
+volumes:
+  gcs-data:

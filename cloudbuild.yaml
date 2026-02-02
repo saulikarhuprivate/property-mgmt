@@ -1,0 +1,77 @@
+steps:
+  # Step 1: Build and push backend Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-backend'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/property-mgmt-backend:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/property-mgmt-backend:latest'
+      - '-f'
+      - 'backend/Dockerfile'
+      - './backend'
+    waitFor: ['-']
+
+  # Step 2: Push backend image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-backend'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/property-mgmt-backend:${SHORT_SHA}'
+    waitFor: ['build-backend']
+
+  # Step 3: Deploy backend to Cloud Run
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    id: 'deploy-backend'
+    args:
+      - 'run'
+      - '--filename=.'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/property-mgmt-backend:${SHORT_SHA}'
+      - '--location=${_REGION}'
+      - '--namespace=default'
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=${_REGION}'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=property-mgmt-cluster'
+    waitFor: ['push-backend']
+
+  # Step 4: Build frontend
+  - name: 'node:18'
+    id: 'build-frontend'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        cd frontend
+        npm install
+        npm run build
+    waitFor: ['-']
+
+  # Step 5: Deploy frontend to Cloud Storage
+  - name: 'gcr.io/cloud-builders/gcs'
+    id: 'deploy-frontend'
+    args:
+      - '-m'
+      - '-d'
+      - 'frontend/dist'
+      - 'gs://${_FRONTEND_BUCKET}/'
+    waitFor: ['build-frontend']
+
+substitutions:
+  _REGION: 'europe-north1'
+  _ARTIFACT_REPO: 'docker-repo'
+  _FRONTEND_BUCKET: '${PROJECT_ID}-frontend'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/property-mgmt-backend:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/property-mgmt-backend:latest'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+tags:
+  - 'gcp-cloud'
+  - 'property-mgmt'
+  - '${SHORT_SHA}'
+  - 'latest'

@@ -4,6 +4,8 @@ from google.cloud import bigquery
 import pandas as pd
 import io
 import os
+import json
+from datetime import datetime
 
 # Triggered by a change to a Cloud Storage bucket
 @functions_framework.cloud_event
@@ -56,44 +58,48 @@ def process_upload(cloud_event):
 def parse_csv(content, provider):
     try:
         csv_file = io.StringIO(content)
-        # TODO: Implement specific parsing logic for 'lumme_energia', 'helen', etc.
-        # Simple generic parser for demo: expect Timestamp, Value
-        df = pd.read_csv(csv_file)
         
-        # Rename columns to match BQ schema
-        # Schema: customer_id, property_id, timestamp, consumption_kwh, provider
+        # Load settings for the provider
+        settings_path = os.path.join(os.path.dirname(__file__), 'upload_formats', provider, 'settings.json')
+        if not os.path.exists(settings_path):
+            print(f"No settings found for provider: {provider}")
+            return None
+            
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+            
+        csv_config = settings.get('csv_settings', {})
+        column_mapping = settings.get('column_mapping', {})
+        timestamp_fmt = settings.get('timestamp_format')
         
-        # Mapping logic
-        column_map = {
-            'Timestamp': 'timestamp',
-            'Time': 'timestamp',
-            'Date': 'timestamp',
-            'Value': 'consumption_kwh',
-            'Consumption': 'consumption_kwh',
-            'Energy': 'consumption_kwh'
-        }
+        # Read CSV using settings
+        df = pd.read_csv(csv_file, **csv_config)
         
-        df = df.rename(columns=column_map)
+        # Rename columns based on mapping
+        # Invert mapping? No, mapping is "CSV Header" -> "Internal Name"
+        # Rename expects { "Old": "New" } which matches our settings structure
+        df = df.rename(columns=column_mapping)
         
         required_cols = ['timestamp', 'consumption_kwh']
-        # Check if required columns exist (case insensitive maybe?)
-        # For now, strict check
         
         available_cols = df.columns.tolist()
-        # Simple check
         if not all(col in available_cols for col in required_cols):
-             # Try to infer if not found? No, keep simple for now.
              print(f"Missing required columns in CSV for provider {provider}. Columns found: {available_cols}")
              return None
             
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        # Parse timestamp with specific format
+        if timestamp_fmt:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format=timestamp_fmt, errors='coerce')
+        else:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+
         # Ensure correct types
         df['consumption_kwh'] = pd.to_numeric(df['consumption_kwh'], errors='coerce')
         
         # Clean NaNs
         df = df.dropna(subset=['timestamp', 'consumption_kwh'])
 
-        return df[required_cols] # Return only needed columns, customer_id etc added later
+        return df[required_cols]
     except Exception as e:
         print(f"Error parsing CSV: {e}")
         return None

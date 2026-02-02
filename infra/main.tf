@@ -219,3 +219,52 @@ resource "google_project_iam_member" "eventarc_receiver" {
   role    = "roles/eventarc.eventReceiver"
   member  = "serviceAccount:${google_service_account.function_identity.email}"
 }
+
+# --- Cloud Build Configuration ---
+
+# Service Account for Cloud Build
+resource "google_service_account" "cloud_build" {
+  account_id   = "cloud-build-sa"
+  display_name = "Cloud Build Service Account"
+}
+
+# Grant Cloud Build access to deploy Cloud Run services
+resource "google_project_iam_member" "cloud_build_runner" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Grant Cloud Build access to push images to Artifact Registry
+resource "google_project_iam_member" "cloud_build_artifact_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Grant Cloud Build access to use service accounts
+resource "google_project_iam_member" "cloud_build_service_account_user" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Cloud Build Trigger for property-mgmt
+resource "google_cloudbuild_trigger" "property_mgmt" {
+  name            = "property-mgmt"
+  description     = "Build trigger for property management application"
+  location        = var.region
+  service_account = google_service_account.cloud_build.id
+
+  github {
+    owner = "saulikarhuprivate"
+    name  = "property-mgmt"
+    push {
+      branch = "^main$"
+    }
+  }
+
+  filename = "cloudbuild.yaml"
+
+  depends_on = [google_project_service.apis]
+}

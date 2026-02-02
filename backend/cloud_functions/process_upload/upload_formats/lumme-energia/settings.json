@@ -1,0 +1,15 @@
+{
+  "name": "Lumme Energia Oy",
+  "description": "Lumme Energian sivuilta saatu CSV-tiedosto, joka sisältää tuntikohtaisia kulutustietoja",
+  "csv_settings": {
+    "sep": ";",
+    "decimal": ",",
+    "encoding": "utf-8",
+    "quotechar": "\""
+  },
+  "column_mapping": {
+    "Ajankohta": "timestamp",
+    "Kulutus": "consumption_kwh"
+  },
+  "timestamp_format": "%Y-%m-%d %H:%M"
+}
