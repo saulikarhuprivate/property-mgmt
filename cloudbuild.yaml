@@ -44,8 +44,8 @@ steps:
       - '-c'
       - |
         BACKEND_URL=$(gcloud run services describe property-mgmt-backend --platform managed --region ${_REGION} --format 'value(status.url)')
-        echo "VITE_API_URL=$BACKEND_URL" > frontend/.env
-        echo "Backend URL fetched: $BACKEND_URL"
+        echo "VITE_API_URL=$$BACKEND_URL" > frontend/.env
+        echo "Backend URL fetched: $$BACKEND_URL"
     waitFor: ['deploy-backend']
 
   # Step 5: Build frontend
