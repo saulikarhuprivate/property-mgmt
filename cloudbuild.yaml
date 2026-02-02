@@ -36,16 +36,31 @@ steps:
       - 'CLOUDSDK_COMPUTE_REGION=${_REGION}'
     waitFor: ['push-backend']
 
-  # Step 4: Fetch Backend URL
+  # Step 4: Configure Environment (Backend URL & Firebase)
   - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'fetch-backend-url'
+    id: 'configure-env'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
+        # Fetch Backend URL
         BACKEND_URL=$(gcloud run services describe property-mgmt-backend --platform managed --region ${_REGION} --format 'value(status.url)')
         echo "VITE_API_URL=$$BACKEND_URL" > frontend/.env
-        echo "Backend URL fetched: $$BACKEND_URL"
+        echo "Backend URL: $$BACKEND_URL"
+
+        # Fetch Firebase Config
+        APP_ID=$(gcloud firebase apps list --platform=WEB --format="value(appId)" --limit=1)
+        if [ -z "$$APP_ID" ]; then
+          echo "No Firebase Web App found. Creating one..."
+          gcloud firebase apps create WEB --display-name="Property Management Frontend"
+          APP_ID=$(gcloud firebase apps list --platform=WEB --format="value(appId)" --limit=1)
+        fi
+        
+        echo "Fetching config for App ID: $$APP_ID"
+        gcloud firebase apps sdk-config --app=$$APP_ID --format=json > firebase_config.json
+        
+        # Parse JSON and append to .env using Python
+        python3 -c "import json, sys; conf=json.load(sys.stdin); print(f'VITE_FIREBASE_API_KEY={conf[\"apiKey\"]}\nVITE_FIREBASE_AUTH_DOMAIN={conf[\"authDomain\"]}\nVITE_FIREBASE_PROJECT_ID={conf[\"projectId\"]}\nVITE_FIREBASE_STORAGE_BUCKET={conf[\"storageBucket\"]}\nVITE_FIREBASE_MESSAGING_SENDER_ID={conf[\"messagingSenderId\"]}\nVITE_FIREBASE_APP_ID={conf[\"appId\"]}')" < firebase_config.json >> frontend/.env
     waitFor: ['deploy-backend']
 
   # Step 5: Build frontend
@@ -58,7 +73,7 @@ steps:
         cd frontend
         npm install
         npm run build
-    waitFor: ['fetch-backend-url']
+    waitFor: ['configure-env']
 
   # Step 5: Deploy frontend to Cloud Storage
   - name: 'gcr.io/cloud-builders/gsutil'

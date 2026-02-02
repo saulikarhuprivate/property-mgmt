@@ -3,14 +3,13 @@ import { getAuth, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, sign
 import { getFirestore, connectFirestoreEmulator, doc, setDoc, getDoc } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
-// For local development, these values don't need to be real
 const firebaseConfig = {
-  apiKey: "demo-key",
-  authDomain: "demo-project.firebaseapp.com",
-  projectId: "property-mgmt-local",
-  storageBucket: "property-mgmt-local.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "demo-key",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "demo-project.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "property-mgmt-local",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "property-mgmt-local.appspot.com",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789:web:abcdef"
 };
 
 // Initialize Firebase
